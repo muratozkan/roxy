@@ -10,6 +10,7 @@ use hyper_tls::HttpsConnector;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use thiserror::Error;
+use tokio::task::JoinHandle;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -23,26 +24,26 @@ pub struct Arguments {
     pub port: u16,
 }
 
-pub async fn start(args: Arguments) -> Result<(), Error> {
+pub async fn start(args: Arguments) -> Result<JoinHandle<()>, Error> {
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
 
-    let make_svc = make_service_fn(|_conn| async {
-        Ok::<_, Infallible>(service_fn(reverse_proxy))
-    });
+    let make_svc =
+        make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(reverse_proxy)) });
 
     let server = Server::try_bind(&addr)
         .map_err(|e| Error::CouldNotStart(e.to_string()))?
         .serve(make_svc)
         .with_graceful_shutdown(shutdown_signal());
 
-    log::info!("proxy started and listening @ {}", addr.to_string());
+    let handle = tokio::spawn(async move {
+        log::info!("proxy started and listening @ {}", addr.to_string());
+        // Await the `server` receiving the signal...
+        if let Err(e) = server.await {
+            log::info!("Server exiting with error: {}", e)
+        }
+    });
 
-    // Await the `server` receiving the signal...
-    if let Err(e) = server.await {
-        return Err(Error::BadExit(e.to_string()));
-    }
-
-    Ok(())
+    Ok(handle)
 }
 
 async fn shutdown_signal() {
@@ -52,13 +53,13 @@ async fn shutdown_signal() {
 async fn reverse_proxy(req: Request<Body>) -> Result<Response<Body>, Error> {
     let https = HttpsConnector::new();
 
-    let mut builder = Request::builder()
-        .uri("https://httpbin.org/anything");
+    let mut builder = Request::builder().uri("https://httpbin.org/anything");
     for (key, value) in req.headers().iter() {
         builder = builder.header(key.as_str(), value.as_bytes());
     }
     let body = req.into_body();
-    let proxy_req = builder.body(body)
+    let proxy_req = builder
+        .body(body)
         .map_err(|e| Error::BadExit(e.to_string()))?;
 
     log::info!("Proxy request: {:?}", &proxy_req);
