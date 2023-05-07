@@ -7,14 +7,17 @@ about = "a local development proxy that rocks!"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.6.17"   # Used for control server
-serde = { version = "1.0.160", features = ["derive"]}
-
+# Control Server
+axum = "0.6.17" 
+axum-macros = "0.3.7"
+# Proxy (launched dynamically within control server)
 hyper = { version = "0.14.26", features = ["full"] }
 hyper-tls = "0.5.0"
+# Common
+serde = { version = "1.0.160", features = ["derive"]}
 tokio = { version = "1.28.0", features = ["full"] }
 log = "0.4.17"
-clap = { version = "4.2.4", features = ["derive"] }
 thiserror = "1.0.40"
 env_logger = "0.10.0"
-axum-macros = "0.3.7"
+# Executable
+clap = { version = "4.2.7", features = ["derive"] }

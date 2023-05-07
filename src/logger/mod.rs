@@ -15,8 +15,8 @@ use env_logger::{
 };
 use log::{Level, LevelFilter};
 
-pub fn init() {
-    formatted_builder().filter_level(LevelFilter::Info).init()
+pub fn init(level: LevelFilter) {
+    formatted_builder().filter_level(level).init()
 }
 
 /// Sets up a custom formatted env_logger for roxy
