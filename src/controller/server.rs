@@ -1,4 +1,4 @@
-use std::{io::Error, net::SocketAddr, pin::Pin, sync::Arc};
+use std::{error::Error, net::SocketAddr, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router, Server};
@@ -7,19 +7,15 @@ use tokio::task::JoinHandle;
 
 use crate::proxy;
 
-pub struct ControlServerArgs {
-    pub port: u16,
-}
-
 #[derive(Default)]
-pub struct ProxyState {
+struct ProxyState {
     handle: Option<Pin<Box<JoinHandle<()>>>>,
 }
 
 type SharedProxyState = Arc<Mutex<ProxyState>>;
 
-pub async fn start_server(args: ControlServerArgs) -> Result<(), Error> {
-    let addr = SocketAddr::from(([127, 0, 0, 1], args.port));
+pub async fn start_server(port: u16) -> Result<(), Box<dyn Error>> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
 
     let controller = Arc::new(Mutex::new(ProxyState::default()));
 
@@ -27,10 +23,7 @@ pub async fn start_server(args: ControlServerArgs) -> Result<(), Error> {
         .route("/proxy", post(start_proxy))
         .with_state(controller);
 
-    Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    Server::bind(&addr).serve(app.into_make_service()).await?;
 
     Ok(())
 }
@@ -49,7 +42,7 @@ async fn start_proxy(
     if status.handle.is_none() {
         let new_handle = proxy::start(proxy::Arguments { port: input.port })
             .await
-            .map_err(|e| StatusCode::PRECONDITION_FAILED)?;
+            .map_err(|_| StatusCode::PRECONDITION_FAILED)?;
         status.handle = Some(Box::pin(new_handle));
     }
 
